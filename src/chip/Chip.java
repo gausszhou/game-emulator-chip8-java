@@ -35,6 +35,7 @@ public class Chip {
 
 		keys = new byte[16];
 		display = new byte[64 * 32];
+		// display[1] = 1;
 	}
 
 	public void run() {
@@ -62,5 +63,9 @@ public class Chip {
 				break;
 		}
 		// execute opcode
+	}
+
+	public byte[] getDisplay() {
+		return display;
 	}
 }
