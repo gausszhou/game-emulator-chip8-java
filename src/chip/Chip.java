@@ -162,4 +162,10 @@ public class Chip {
 
 	}
 
+	public void loadFontset() {
+		for (int i = 0; i < ChipData.fontset.length; i++) {
+			memory[0x50 + i] = (char)(ChipData.fontset[i]);
+		}
+	}
+
 }
