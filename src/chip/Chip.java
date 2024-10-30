@@ -4,6 +4,7 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Random;
 
 public class Chip {
 
@@ -44,8 +45,11 @@ public class Chip {
 		sound_timer = 0;
 
 		keys = new byte[16];
+
 		display = new byte[64 * 32];
 
+		needRedraw = false;
+		loadFontset();
 	}
 
 	public void run() {
@@ -83,17 +87,20 @@ public class Chip {
 			}
 			// 1NNN 跳转到地址 NNN
 			case 0x1000: {
-				pc = (char) (opcode & 0x0FFF);
+				int nnn = (opcode & 0x0FFF);
+				pc = (char) nnn;
 				System.out.println(" Jump " + Integer.toHexString(pc).toUpperCase());
 				break;
 			}
 			// 2NNN 在 NNN 处调用子例程。
-			case 0x2000:
+			case 0x2000: {
 				stack[stackPointer] = pc;
 				stackPointer += 1;
 				pc = (char) (opcode & 0x0FFF);
 				System.out.println("Calling " + Integer.toHexString(pc).toUpperCase());
 				break;
+			}
+				
 			// 3XNN 如果 VX 等于 NN，则跳过下一条指令
 			case 0x3000: {
 				int x = (opcode & 0x0F00) >> 8;
@@ -103,6 +110,7 @@ public class Chip {
 					System.out.println("Skipping next instruction (V[" + x + "] == " + nn + ")");
 				} else {
 					pc += 2;
+					System.out.println("Not skipping next instruction (V[" + x +"] != " + nn + ")");
 				}
 				break;
 			}
@@ -116,6 +124,7 @@ public class Chip {
 					System.out.println("Skipping next instruction (V[" + x + "] != " + nn + ")");
 				} else {
 					pc += 2;
+					System.out.println("NOt Skipping next instruction (V[" + x + "] == " + nn + ")");
 				}
 				break;
 			}
@@ -142,22 +151,23 @@ public class Chip {
 			}
 			// 7XNN 将 NN 添加到 VX
 			case 0x7000: {
-				int x7 = (opcode & 0x0F00) >> 8;
-				int nn7 = (opcode & 0x00FF);
-				V[x7] = (char) ((V[x7] + nn7) & 0xFF);
+				int x = (opcode & 0x0F00) >> 8;
+				int nn = (opcode & 0x00FF);
+				V[x] = (char) ((V[x] + nn) & 0xFF);
 				pc += 2;
-				System.out.println("Adding " + nn7 + " to V[" + x7 + "] = " + (int) V[x7]);
+				System.out.println("Adding " + nn + " to V[" + x + "] = " + (int) V[x]);
 				break;
 			}
 
-			// 8XNN
+			// 8XYN
 			case 0x8000:
 				switch (opcode & 0x000F) {
 					// 8XY0 将 VX 设置为 VY 的值
-					case 0x0000:
+					case 0x0000: {
 						System.err.println("Unsupported Opcode! 0x8000");
 						System.exit(0);
 						break;
+					}
 					// 8XY1 将 VX 设置为 VX 位或 VY Vx |= Vy
 					// 8XY2 将 VX 设置为 VX 位与 VY Vx &= Vy
 					// 8XY3 将 VX 设置为 VX 位异或 VY Vx ^= Vy
@@ -184,7 +194,15 @@ public class Chip {
 				pc = (char) (V[0] + (opcode & 0x00FFF));
 				break;
 			}
-
+			// CXNN 将 VX 设置为随机数（通常为 0 到 255）和 NN 的按位运算的结果
+			case 0xC000: {
+				int x = (opcode & 0x0F00) >> 8;
+				int nn = (opcode & 0x00FF);
+				V[x] = (char) (new Random().nextInt(256) & nn);
+				pc += 2;
+				System.out.println("Sets V[" + x + "] to the result of a bitwise and operation on a random number");
+				break;
+			}
 			// DXYN 在坐标 （VX， VY） 处绘制一个 sprite，该 sprite 的宽度为 8 像素，高度为 N 像素
 			case 0xD000: {
 				int xd = (opcode & 0x0F00) >> 8;
@@ -192,6 +210,7 @@ public class Chip {
 				int yd = (opcode & 0x00F0) >> 4;
 				int vyd = V[yd];
 				int height = (opcode & 0x000F);
+				V[0xF] = 0;
 				for (int _y = 0; _y < height; _y++) {
 					int line = memory[I + _y];
 					for (int _x = 0; _x < 8; _x++) {
@@ -212,6 +231,40 @@ public class Chip {
 				System.out.println("Draws a sprite at coordinate (" + vxd + "," + vyd + ")");
 				break;
 			}
+			// ENNN 处理键盘操作
+			case 0xE000: {
+				switch (opcode & 0x00FF) {
+					// EX9E 如果按下 VX 中存储的键，则跳过下一条指令
+					case 0x009E: {
+						int x = (opcode & 0x0F00) >> 8;
+						if (keys[V[x]] == 1) {
+							pc += 4;
+							System.out.println("Skips the next instruction if the key stored in " + V[x] + " is not pressed");
+						} else {
+							pc += 2;
+						}
+						break;
+					}
+
+					// EXA1 如果未按下存储在 VX 中的键，则跳过下一条指令
+					case 0x00A1: {
+						int x = (opcode & 0x0F00) >> 8;
+						if (keys[V[x]] == 0) {
+							pc += 4;
+							System.out.println("Skips the next instruction if the key stored in " + V[x] + " is not pressed");
+						} else {
+							pc += 2;
+						}
+						break;
+					}
+
+					default:
+						System.err.println("Unexisting Opcode!");
+						System.exit(0);
+						break;
+				}
+				break;
+			}
 			// FNNN
 			case 0xF000: {
 				switch (opcode & 0x00FF) {
@@ -219,17 +272,17 @@ public class Chip {
 					// FX07 将 VX 设置为延迟计时器的值
 					case 0x0007: {
 						int x = (opcode & 0x0F00) >> 8;
-						V[x] = (char)delay_timer;
+						V[x] = (char) delay_timer;
 						pc += 2;
-						System.out.println("Sets VX "+ V[x] +" to the value of the delay timer.");
+						System.out.println("Sets VX " + V[x] + " to the value of the delay timer.");
 						break;
 					}
 					// FX15 将延迟计时器设置为 VX
 					case 0x0015: {
 						int x = (opcode & 0x0F00) >> 8;
-						delay_timer = (int)V[x];
+						delay_timer = V[x];
 						pc += 2;
-						System.out.println("Sets the delay timer to VX." + V[x]);
+						System.out.println("Sets the delay timer to V[" + x + "] = " + V[x]);
 						break;
 					}
 					// FX18 将声音计时器设置为 VX
@@ -240,15 +293,24 @@ public class Chip {
 						System.out.println("Sets the sound timer to VX." + V[x]);
 						break;
 					}
+					// FX29 将 I 设置为角色在 VX 中的 sprite 位置。字符 0-F（十六进制）由 4x5 字体表示。
+					case 0x0029: {
+						int x = (opcode & 0x0F00) >> 8;
+						int character = V[x];
+						I = (char) (0x050 + (character * 5));
+						pc += 2;
+						System.out.println("Sets I to the location of the sprite for the character in V[" + x + "]");
+						break;
+					}
 					// FX33 存储 VX 的二进制编码十进制表示形式，其中内存中的百位数字位于 I 位置，十位数字位于位置 I+1，个位数位于位置 I+2。
 					case 0x0033: {
 						int x = (opcode & 0x0F00) >> 8;
-						int vx = V[x];
-						int hundreds = (vx - (vx % 100)) / 100;
-						vx -= hundreds * 100;
-						int tens = (vx - (vx % 10)) / 10;
-						vx -= tens * 10;
-						int ones = vx;
+						int value = V[x];
+						int hundreds = (value - (value % 100)) / 100;
+						value -= hundreds * 100;
+						int tens = (value - (value % 10)) / 10;
+						value -= tens * 10;
+						int ones = value;
 						memory[I] = (char) hundreds;
 						memory[I + 1] = (char) tens;
 						memory[I + 2] = (char) ones;
@@ -257,15 +319,7 @@ public class Chip {
 								.println("Stores the binary-coded decimal representation of V[" + x + "]: " + hundreds + tens + ones);
 						break;
 					}
-					// FX29 将 I 设置为角色在 VX 中的 sprite 位置。字符 0-F（十六进制）由 4x5 字体表示。
-					case 0x0029: {
-						int x = (opcode & 0x0F00) >> 8;
-						int character = V[x];
-						I = (char)(0x050 + (character * 5));
-						pc += 2;
-						System.out.println("Sets I to the location of the sprite for the character in V[" + x +"]");
-						break;
-					}
+
 					// FX65 使用内存中的值从 V0 填充到 VX（包括 VX），从地址 I 开始。对于每个读取的值，与 I 的偏移量增加 1，但 I 本身保持不变。
 					case 0x0065: {
 						int x = (opcode & 0x0F00) >> 8;
@@ -278,7 +332,7 @@ public class Chip {
 						break;
 					}
 					default: {
-						System.err.println("Unsupported Opcode!" + opcode);
+						System.err.println("Unsupported Opcode!");
 						System.exit(0);
 						break;
 					}
@@ -287,7 +341,7 @@ public class Chip {
 			}
 
 			default:
-				System.err.println("Unsupported Opcode!" + Integer.toHexString(opcode).toUpperCase());
+				System.err.println("Unsupported Opcode!");
 				System.exit(0);
 				break;
 		}
@@ -330,7 +384,7 @@ public class Chip {
 
 	public void setKeyBuffer(int[] keyBuffer) {
 		for (int i = 0; i < keys.length; i++) {
-			keys[i] = (byte)keyBuffer[i];
+			keys[i] = (byte) keyBuffer[i];
 		}
 	}
 
