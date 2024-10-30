@@ -9,9 +9,11 @@ public class Chip {
 
 	// 内存
 	private char[] memory;
-	// 寄存器
+	// 一组寄存器
 	private char[] V;
+	// 光标指针位置寄存器
 	private char I;
+	// 程序指针寄存器
 	private char pc;
 
 	// 堆栈
@@ -33,6 +35,7 @@ public class Chip {
 		memory = new char[4096];
 		V = new char[16];
 		I = 0x0;
+		pc = 0x200;
 
 		stack = new char[16];
 		stackPointer = 0;
@@ -49,34 +52,39 @@ public class Chip {
 		// fetch opcode
 		char opcode = (char) (memory[pc] << 8 | memory[pc + 1]);
 		// decode opcode
-		System.out.println(Integer.toHexString(opcode) + ": ");
+		System.out.print(Integer.toHexString(opcode) + ": ");
 
 		switch (opcode & 0xF000) { // get head 1 type
 			// 1NNN 跳转到地址 NNN
 			case 0x1000:
 				pc = (char) (opcode & 0x0FFF);
+				System.out.println(" Jump " + Integer.toHexString(pc).toUpperCase());
 				break;
 			// 2NNN 在 NNN 处调用子例程。
 			case 0x2000:
 				stack[stackPointer] = pc;
 				stackPointer += 1;
 				pc = (char) (opcode & 0x0FFF);
+				System.out.println("Calling " + Integer.toHexString(pc).toUpperCase());
 				break;
 			// 3XNN 如果 VX 等于 NN，则跳过下一条指令
 			case 0x3000:
 				int x3 = (opcode & 0x0F00) >> 8;
-				// TODO
+				System.err.println("Unsupported Opcode! 0x3000");
+				System.exit(0);
 				break;
 			// 4XNN 如果 VX 不等于 NN，则跳过下一条指令
 			case 0x4000:
 				int x4 = (opcode & 0x0F00) >> 8;
-				// TODO
+				System.err.println("Unsupported Opcode! 0x4000");
+				System.exit(0);
 				break;
 			// 5XY0 如果 VX 等于 VY，则跳过下一条指令
 			case 0x5000:
 				int x5 = (opcode & 0x0F00) >> 8;
 				int y5 = (opcode & 0x00F0) >> 4;
-				// TODO
+				System.err.println("Unsupported Opcode! 0x5000");
+				System.exit(0);
 				break;
 			// 6XNN 将 VX 设置为 NN
 			case 0x6000:
@@ -84,6 +92,7 @@ public class Chip {
 				int nn6 = (opcode & 0x00FF);
 				V[x6] = (char) nn6;
 				pc += 2;
+				System.out.println("Setting V[" + x6 + "] to " + (int) V[x6]);
 				break;
 			// 7XNN 将 NN 添加到 VX
 			case 0x7000:
@@ -91,6 +100,7 @@ public class Chip {
 				int nn7 = (opcode & 0x00FF);
 				V[x7] = (char) ((V[x7] + nn7) & 0xFF);
 				pc += 2;
+				System.out.println("Adding " + nn7 + " to V[" + x7 + "] = " + (int) V[x7]);
 				break;
 			// 8XNN
 			case 0x8000:
@@ -115,6 +125,7 @@ public class Chip {
 			case 0xA000:
 				I = (char) (opcode & 0x0FFF);
 				pc += 2;
+				System.out.println("Set I to " + Integer.toHexString(I).toUpperCase());
 				break;
 			// BNNN 跳转到地址 NNN 加 V0 => PC = V0 + NNN
 			case 0xB000:
@@ -123,12 +134,37 @@ public class Chip {
 				pc = (char) (V[0] + (opcode & 0x00FFF));
 
 				break;
-			case 0xD000:
-				// TODO
+			// DXYN 在坐标 （VX， VY） 处绘制一个 sprite，该 sprite 的宽度为 8 像素，高度为 N 像素
+			case 0xD000: {
+				int xd = (opcode & 0x0F00) >> 8;
+				int vxd = V[xd];
+				int yd = (opcode & 0x00F0) >> 4;
+				int vyd = V[yd];
+				int height = (opcode & 0x000F);
+				for (int _y = 0; _y < height; _y++) {
+					int line = memory[I + _y];
+					for (int _x = 0; _x < 8; _x++) {
+						int pixel = line & (0x80 >> _x);
+						if (pixel != 0) {
+							int totalX = vxd + _x;
+							int totalY = vyd + _y;
+							int index = totalY * 64 + totalX;
+							if (display[index] == 1) {
+								V[0xF] = 1;
+							}
+							display[index] ^= 1;
+						}
+					}
+				}
 				pc += 2;
+				needRedraw = true;
+				System.out.println("Draws a sprite at coordinate (" + vxd  + "," +  vyd + ")");
 				break;
+			}
+
 			default:
 				System.err.println("Unsupported Opcode!" + opcode);
+				System.exit(0);
 				break;
 		}
 		// execute opcode
@@ -164,7 +200,7 @@ public class Chip {
 
 	public void loadFontset() {
 		for (int i = 0; i < ChipData.fontset.length; i++) {
-			memory[0x50 + i] = (char)(ChipData.fontset[i]);
+			memory[0x50 + i] = (char) (ChipData.fontset[i]);
 		}
 	}
 
