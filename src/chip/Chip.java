@@ -328,4 +328,10 @@ public class Chip {
 		}
 	}
 
+	public void setKeyBuffer(int[] keyBuffer) {
+		for (int i = 0; i < keys.length; i++) {
+			keys[i] = (byte)keyBuffer[i];
+		}
+	}
+
 }
