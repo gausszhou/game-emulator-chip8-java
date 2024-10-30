@@ -64,8 +64,8 @@ public class Chip {
 				switch (opcode & 0x0FFF) {
 					// 00E0 清除屏幕
 					case 0x00E0: {
-						System.err.println("Unsupported Opcode!");
-						System.exit(0);
+						pc += 2;
+						System.out.println("Clears the screen");
 						break;
 					}
 					// 00EE 从子例程返回
@@ -89,7 +89,7 @@ public class Chip {
 			case 0x1000: {
 				int nnn = (opcode & 0x0FFF);
 				pc = (char) nnn;
-				System.out.println(" Jump " + Integer.toHexString(pc).toUpperCase());
+				System.out.println("Jumps to address " + Integer.toHexString(pc).toUpperCase());
 				break;
 			}
 			// 2NNN 在 NNN 处调用子例程。
@@ -97,20 +97,21 @@ public class Chip {
 				stack[stackPointer] = pc;
 				stackPointer += 1;
 				pc = (char) (opcode & 0x0FFF);
-				System.out.println("Calling " + Integer.toHexString(pc).toUpperCase());
+				System.out.println("Calls subroutine at " + Integer.toHexString(pc).toUpperCase());
 				break;
 			}
-				
+
 			// 3XNN 如果 VX 等于 NN，则跳过下一条指令
 			case 0x3000: {
 				int x = (opcode & 0x0F00) >> 8;
 				int nn = (opcode & 0x00FF);
-				if (V[x] == nn) {
+				// TODO
+				if (V[x] != nn) {
 					pc += 4;
-					System.out.println("Skipping next instruction (V[" + x + "] == " + nn + ")");
+					System.out.println("Skipping next instruction if (V[" + x + "] == " + nn + ")");
 				} else {
 					pc += 2;
-					System.out.println("Not skipping next instruction (V[" + x +"] != " + nn + ")");
+					System.out.println("Not skipping next instruction if (V[" + x + "] != " + nn + ")");
 				}
 				break;
 			}
@@ -121,10 +122,10 @@ public class Chip {
 				int nn = (opcode & 0x00FF);
 				if (V[x] != nn) {
 					pc += 4;
-					System.out.println("Skipping next instruction (V[" + x + "] != " + nn + ")");
+					System.out.println("Skipping next instruction if (V[" + x + "] != " + nn + ")");
 				} else {
 					pc += 2;
-					System.out.println("NOt Skipping next instruction (V[" + x + "] == " + nn + ")");
+					System.out.println("NOt Skipping next instruction if (V[" + x + "] == " + nn + ")");
 				}
 				break;
 			}
@@ -146,7 +147,7 @@ public class Chip {
 				int nn = (opcode & 0x00FF);
 				V[x] = (char) nn;
 				pc += 2;
-				System.out.println("Setting V[" + x + "] to " + nn);
+				System.out.println("Sets V[" + x + "] to NN = " + nn);
 				break;
 			}
 			// 7XNN 将 NN 添加到 VX
@@ -163,15 +164,83 @@ public class Chip {
 			case 0x8000:
 				switch (opcode & 0x000F) {
 					// 8XY0 将 VX 设置为 VY 的值
+					// Vx = Vy
 					case 0x0000: {
-						System.err.println("Unsupported Opcode! 0x8000");
-						System.exit(0);
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = V[y];
+						pc += 2;
+						System.out.println("Set V[" + x + "] to the value of V[" + y + "] = " + V[x]);
 						break;
 					}
-					// 8XY1 将 VX 设置为 VX 位或 VY Vx |= Vy
-					// 8XY2 将 VX 设置为 VX 位与 VY Vx &= Vy
-					// 8XY3 将 VX 设置为 VX 位异或 VY Vx ^= Vy
+					// 8XY1 将 VX 设置为 VX 位或
+					// VY Vx |= Vy
+					case 0x0001: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[x] | V[y]);
+						pc += 2;
+						System.out.println("Set V[" + x + "] to V[" + x + "] | V[" + y + "]= " + V[x]);
+						break;
+					}
+					// 8XY2 将 VX 设置为 VX 位与 VY
+					// Vx &= Vy
+					case 0x0002: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[x] & V[y]);
+						pc += 2;
+						System.out.println("Set V[" + x + "] to V[" + x + "] & V[" + y + "]= " + V[x]);
+						break;
+					}
+					// 8XY3 将 VX 设置为 VX 位异或 VY
+					// Vx ^= Vy
+					case 0x0003: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[x] ^ V[y]);
+						pc += 2;
+						System.out.println("Set V[" + x + "] to V[" + x + "] ^ V[" + y + "]= " + V[x]);
+						break;
+					}
 					// 8XY4 将 VY 添加到 VX 中
+					// Vx += Vy
+					case 0x0004: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[x] + V[y]);
+						pc += 2;
+						System.out.println("Set V[" + x + "] to V[" + x + "] + V[" + y + "]= " + V[x]);
+						break;
+					}
+					// 8XY5 从 VX 中减去 VY
+					// Vx -= Vy
+					case 0x0005: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[x] - V[y]);
+						pc += 2;
+						System.out.println("Set V[" + x + "] to V[" + x + "] - V[" + y + "]= " + V[x]);
+						break;
+					}
+					// 8XY6 将 VX 向右移动 1，然后在切换到 VF 之前存储 VX 的最低有效位
+					case 0x0006: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[x] >> 1);
+						pc += 2;
+						System.out.println("Shifts V[" + x + "] to the right by 1");
+						break;
+					}
+					// 8XY7 将 VX 设置为 VY 减去 VX
+					case 0x0007: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						V[x] = (char) (V[y] - V[x]);
+						pc += 2;
+						System.out.println("Sets V[" + x + "] to V[" + y + "] - V[" + x + "] = " + V[x]);
+						break;
+					}
 
 					default:
 						System.err.println("Unsupported Opcode! 0x8000");
@@ -198,7 +267,8 @@ public class Chip {
 			case 0xC000: {
 				int x = (opcode & 0x0F00) >> 8;
 				int nn = (opcode & 0x00FF);
-				V[x] = (char) (new Random().nextInt(256) & nn);
+				int randomNumber = new Random().nextInt(256) & nn;
+				V[x] = (char) randomNumber;
 				pc += 2;
 				System.out.println("Sets V[" + x + "] to the result of a bitwise and operation on a random number");
 				break;
@@ -272,17 +342,17 @@ public class Chip {
 					// FX07 将 VX 设置为延迟计时器的值
 					case 0x0007: {
 						int x = (opcode & 0x0F00) >> 8;
-						V[x] = (char) delay_timer;
+						V[x] = (char) (delay_timer & 0x0FFF);
 						pc += 2;
-						System.out.println("Sets VX " + V[x] + " to the value of the delay timer.");
+						System.out.println("Sets V[" + x + "] " + (int) V[x] + " to the value of the delay timer.");
 						break;
 					}
 					// FX15 将延迟计时器设置为 VX
 					case 0x0015: {
 						int x = (opcode & 0x0F00) >> 8;
-						delay_timer = V[x];
+						delay_timer = V[x] & 0x0FFF;
 						pc += 2;
-						System.out.println("Sets the delay timer to V[" + x + "] = " + V[x]);
+						System.out.println("Sets the delay timer to V[" + x + "] = " + (int) V[x]);
 						break;
 					}
 					// FX18 将声音计时器设置为 VX
@@ -299,7 +369,8 @@ public class Chip {
 						int character = V[x];
 						I = (char) (0x050 + (character * 5));
 						pc += 2;
-						System.out.println("Sets I to the location of the sprite for the character in V[" + x + "]");
+						System.out.println("Setting I to Character V[" + x + "] = " + (int) V[x] + " Offset to 0x"
+								+ Integer.toHexString(I).toUpperCase());
 						break;
 					}
 					// FX33 存储 VX 的二进制编码十进制表示形式，其中内存中的百位数字位于 I 位置，十位数字位于位置 I+1，个位数位于位置 I+2。
