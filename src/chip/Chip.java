@@ -7,11 +7,11 @@ import java.io.IOException;
 
 public class Chip {
 
-	// 内存
+	// 内存 4096 2 的 12 次方
 	private char[] memory;
-	// 一组寄存器
+	// 数据寄存器 16 个 8 bit
 	private char[] V;
-	// 光标指针位置寄存器
+	// 地址寄存器 12 位
 	private char I;
 	// 程序指针寄存器
 	private char pc;
@@ -52,7 +52,7 @@ public class Chip {
 		// fetch opcode 16 bit
 		char opcode = (char) (memory[pc] << 8 | memory[pc + 1]);
 		// decode opcode
-		System.out.print(Integer.toHexString(opcode) + ": ");
+		System.out.print(Integer.toHexString(opcode).toUpperCase() + ": ");
 
 		switch (opcode & 0xF000) { // get head 1 type
 			// 0NNN
@@ -214,23 +214,67 @@ public class Chip {
 			}
 			// FNNN
 			case 0xF000: {
-				switch (opcode & 0xF0FF) {
+				switch (opcode & 0x00FF) {
 
-					// FX15 将延迟计时器设置为 VX
-					case 0xF015: {
+					// FX07 将 VX 设置为延迟计时器的值
+					case 0x0007: {
+						int x = (opcode & 0x0F00) >> 8;
+						V[x] = (char)delay_timer;
 						pc += 2;
+						System.out.println("Sets VX "+ V[x] +" to the value of the delay timer.");
+						break;
+					}
+					// FX15 将延迟计时器设置为 VX
+					case 0x0015: {
+						int x = (opcode & 0x0F00) >> 8;
+						delay_timer = (int)V[x];
+						pc += 2;
+						System.out.println("Sets the delay timer to VX." + V[x]);
 						break;
 					}
 					// FX18 将声音计时器设置为 VX
-					case 0xF018: {
+					case 0x0018: {
+						int x = (opcode & 0x0F00) >> 8;
+						sound_timer = V[x];
 						pc += 2;
+						System.out.println("Sets the sound timer to VX." + V[x]);
 						break;
 					}
-					// FX33 存储 VX 的二进制编码十进制表示形式
-					case 0xF033: {
-						int x = opcode & 0x0F00 >> 8;
+					// FX33 存储 VX 的二进制编码十进制表示形式，其中内存中的百位数字位于 I 位置，十位数字位于位置 I+1，个位数位于位置 I+2。
+					case 0x0033: {
+						int x = (opcode & 0x0F00) >> 8;
+						int vx = V[x];
+						int hundreds = (vx - (vx % 100)) / 100;
+						vx -= hundreds * 100;
+						int tens = (vx - (vx % 10)) / 10;
+						vx -= tens * 10;
+						int ones = vx;
+						memory[I] = (char) hundreds;
+						memory[I + 1] = (char) tens;
+						memory[I + 2] = (char) ones;
 						pc += 2;
-						System.out.println("Stores the binary-coded decimal representation of V[" + x + "]");
+						System.out
+								.println("Stores the binary-coded decimal representation of V[" + x + "]: " + hundreds + tens + ones);
+						break;
+					}
+					// FX29 将 I 设置为角色在 VX 中的 sprite 位置。字符 0-F（十六进制）由 4x5 字体表示。
+					case 0x0029: {
+						int x = (opcode & 0x0F00) >> 8;
+						int character = V[x];
+						I = (char)(0x050 + (character * 5));
+						pc += 2;
+						System.out.println("Sets I to the location of the sprite for the character in V[" + x +"]");
+						break;
+					}
+					// FX65 使用内存中的值从 V0 填充到 VX（包括 VX），从地址 I 开始。对于每个读取的值，与 I 的偏移量增加 1，但 I 本身保持不变。
+					case 0x0065: {
+						int x = (opcode & 0x0F00) >> 8;
+						for (int i = 0; i < x; i++) {
+							V[i] = memory[I + i];
+						}
+						pc += 2;
+						System.out.println("Fills from V[0] to V[" + x + "] with values from memory[0x"
+								+ Integer.toHexString((I & 0xFF)).toUpperCase() + "]");
 						break;
 					}
 					default: {
