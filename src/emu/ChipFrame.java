@@ -31,7 +31,7 @@ public class ChipFrame extends JFrame implements KeyListener {
         setTitle("Chip 8 Emulator");
         pack();
         setVisible(true);
-
+        addKeyListener(this);
         keyBuffer = new int[16];
         keyIdToKey = new int[256];
 

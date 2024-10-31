@@ -16,6 +16,7 @@ public class Main extends Thread {
 
     public void run() {
         while (true) {
+            chip8.setKeyBuffer(frame.getKeyBuffer());
             chip8.run();
             if (chip8.isNeedRedraw()) {
                 frame.repaint();
