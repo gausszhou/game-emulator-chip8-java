@@ -12,7 +12,7 @@ public class Chip {
 	private char[] memory;
 	// 数据寄存器 16 个 8 bit
 	private char[] V;
-	// 地址寄存器 12 位
+	// 地址寄存器 12 位 用于指向内存地址（基址）
 	private char I;
 	// 程序指针寄存器
 	private char pc;
@@ -65,7 +65,10 @@ public class Chip {
 				switch (opcode & 0x0FFF) {
 					// 00E0 清除屏幕
 					case 0x00E0: {
-						removeDrawFlag();
+						for (int i = 0; i < display.length; i++) {
+							display[i] = 0;
+						}
+						needRedraw = true;
 						pc += 2;
 						System.out.println("00E0 Clears the screen");
 						break;
@@ -217,7 +220,7 @@ public class Chip {
 						}
 						V[x] = (char) ((V[x] + V[y]) & 0xFF);
 						pc += 2;
-						System.out.println("8XY4 Set V[" + x + "] to V[" + x + "] + V[" + y + "]= " + (int)V[x]);
+						System.out.println("8XY4 Set V[" + x + "] to V[" + x + "] + V[" + y + "]= " + (int) V[x]);
 						break;
 					}
 					// 8XY5 从 VX 中减去 VY
@@ -234,13 +237,13 @@ public class Chip {
 						}
 						V[x] = (char) ((V[x] - V[y]) & 0xFF);
 						pc += 2;
-						System.out.println("8XY5 Set V[" + x + "] to V[" + x + "] - V[" + y + "]= " + (int)V[x]);
+						System.out.println("8XY5 Set V[" + x + "] to V[" + x + "] - V[" + y + "]= " + (int) V[x]);
 						break;
 					}
 					// 8XY6 将 VX 向右移动 1，然后在切换到 VF 之前存储 VX 的最低有效位
 					case 0x0006: {
 						int x = (opcode & 0x0F00) >> 8;
-						int y = (opcode & 0x00F0) >> 4;
+						V[0xF] = (char) (V[x] & 0x1);
 						V[x] = (char) (V[x] >> 1);
 						pc += 2;
 						System.out.println("8XY6 Shifts V[" + x + "] to the right by 1");
@@ -250,11 +253,17 @@ public class Chip {
 					case 0x0007: {
 						int x = (opcode & 0x0F00) >> 8;
 						int y = (opcode & 0x00F0) >> 4;
+						if (V[y] > V[x]) {
+							V[0xF] = 1;
+						} else {
+							V[0xF] = 0;
+						}
 						V[x] = (char) (V[y] - V[x]);
 						pc += 2;
-						System.out.println("8XY7 Sets V[" + x + "] to V[" + y + "] - V[" + x + "] = " + (int)V[x]);
+						System.out.println("8XY7 Sets V[" + x + "] to V[" + y + "] - V[" + x + "] = " + (int) V[x]);
 						break;
 					}
+					// 8XYE TODO
 
 					default:
 						System.err.println("Unsupported Opcode! 0x8000");
@@ -263,7 +272,30 @@ public class Chip {
 				}
 				break;
 			}
-
+			// 9NNN
+			case 0x9000: {
+				switch (opcode & 0x000F) {
+					// 9XY0 如果 VX 不等于 VY，则跳过下一条指令
+					case 0x0000: {
+						int x = (opcode & 0x0F00) >> 8;
+						int y = (opcode & 0x00F0) >> 4;
+						if(V[x] != V[y]) {
+							pc += 4;
+							
+						} else {
+							pc += 2;
+						}
+						System.out.println("9XY0 Skips the next instruction if VX does not equal VY. ");
+						break;
+					}
+					default: {
+						System.err.println("Unsupported Opcode! 0x8000");
+						System.exit(0);
+						break;
+					}
+				}
+				break;
+			}
 			// ANNN 将 I 设置为地址 NNN => I = NNN
 			case 0xA000: {
 				I = (char) (opcode & 0x0FFF);
@@ -305,6 +337,8 @@ public class Chip {
 						if (pixel != 0) {
 							int totalX = vxd + _x;
 							int totalY = vyd + _y;
+							totalX = totalX % 64;
+							totalY = totalY % 32;
 							int index = totalY * 64 + totalX;
 							if (display[index] == 1) {
 								V[0xF] = 1;
@@ -366,6 +400,18 @@ public class Chip {
 						System.out.println("FX07 Sets V[" + x + "] " + (int) V[x] + " to the value of the delay timer.");
 						break;
 					}
+					// FX0A 等待按键，然后存储在 VX 中 （阻塞操作，所有指令停止，直到下一个按键事件）
+					case 0x000A: {
+						int x = (opcode & 0x0F00) >> 8;
+						for (int i = 0; i < keys.length; i++) {
+							if (keys[i] == 1) {
+								V[x] = (char) i;
+								pc += 2;
+								break;
+							}
+						}
+						System.out.println("FX0A Awaiting a key pressed store to V["+ x +"]");
+					}
 					// FX15 将延迟计时器设置为 VX
 					case 0x0015: {
 						int x = (opcode & 0x0F00) >> 8;
@@ -377,7 +423,8 @@ public class Chip {
 					// FX18 将声音计时器设置为 VX
 					case 0x0018: {
 						int x = (opcode & 0x0F00) >> 8;
-						sound_timer = V[x];
+						// sound_timer = V[x];
+						sound_timer = 1; // 调整为只发一次声音
 						pc += 2;
 						System.out.println("FX18 Sets the sound timer to VX." + V[x]);
 						break;
@@ -390,6 +437,13 @@ public class Chip {
 						pc += 2;
 						System.out.println("FX29 Setting I to Character V[" + x + "] = " + (int) V[x] + " Offset to 0x"
 								+ Integer.toHexString(I).toUpperCase());
+						break;
+					}
+					// FX1E
+					case 0x001E: {
+						int x = (opcode & 0x0F00) >> 8;
+						I = (char) (I + V[x]);
+						pc += 2;
 						break;
 					}
 					// FX33 存储 VX 的二进制编码十进制表示形式，其中内存中的百位数字位于 I 位置，十位数字位于位置 I+1，个位数位于位置 I+2。
@@ -408,6 +462,16 @@ public class Chip {
 						System.out
 								.println(
 										"FX33 Stores the binary-coded decimal representation of V[" + x + "]: " + hundreds + tens + ones);
+						break;
+					}
+					// FX55 将 V0 到 VX（包括 VX）存储在内存中，从地址 I 开始。每写入一个值，与 I 的偏移量就会增加 1，但 I 本身保持不变。
+					case 0x0055: {
+						int x = (opcode & 0x0F00) >> 8;
+						for (int i = 0; i < x; i++) {
+							memory[I + i] = V[i];
+						}
+						pc += 2;
+						System.out.println("FX55 Stores from V0 to VX (including VX) in memory, starting at address I.");
 						break;
 					}
 
@@ -441,6 +505,7 @@ public class Chip {
 		}
 		if (sound_timer > 0) {
 			sound_timer--;
+			Audio.playSound();
 		}
 		if (delay_timer > 0) {
 			delay_timer--;
